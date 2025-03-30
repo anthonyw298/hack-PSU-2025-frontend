@@ -42,20 +42,46 @@ export default function HomeScreen() {
   const handleNameSubmit = async () => {
     if (tempPhotoUri && name.trim()) {
       try {
+        // Save to camera roll (existing functionality)
         await MediaLibrary.saveToLibraryAsync(tempPhotoUri);
+
+        // Convert photo to base64 (needed for sending in request)
+        const response = await fetch(tempPhotoUri);
+        const blob = await response.blob();
+        const base64Photo = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result);
+          reader.readAsDataURL(blob);
+        });
+
+        // Send to your backend server
+        const serverResponse = await fetch('YOUR_BACKEND_URL/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            name: name,
+            photo: base64Photo,
+          }),
+        });
+
+        if (!serverResponse.ok) {
+          throw new Error('Failed to upload to server');
+        }
+
+        // Continue with existing success flow
         setShowNameModal(false);
         setShowMessage(true);
         
-        // Navigate after 1 second
         setTimeout(() => {
           setShowMessage(false);
           router.push('/leaderboard');
-          setName('');
-          setTempPhotoUri(null);
         }, 1000);
+
       } catch (error) {
-        console.error('Error saving photo:', error);
-        alert('Failed to save photo. Please try again.');
+        console.error('Error:', error);
+        alert('Failed to process photo. Please try again.');
       }
     }
   };
