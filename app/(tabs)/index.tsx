@@ -4,6 +4,7 @@ import { StyleSheet, Text, View, TouchableOpacity, Modal, TextInput } from 'reac
 import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_URL } from '../../config';
 
 interface RatingEntry {
   id: string;
@@ -53,29 +54,29 @@ export default function HomeScreen() {
         // Save photo to camera roll
         await MediaLibrary.saveToLibraryAsync(tempPhotoUri);
 
-        // Create mock backend response
-        const newRating: RatingEntry = {
-          id: Date.now().toString(),
+        // Create rating data
+        const newRating = {
           name: name,
           rating: 1,
           timestamp: new Date().toISOString()
         };
 
-        // Get existing ratings
-        const existingRatingsString = await AsyncStorage.getItem('ratings');
-        console.log('Existing ratings:', existingRatingsString); // Debug log
+        // Send to backend
+        console.log("this is pre network request");
+        console.log("[API URL] This it the url: ", API_URL);
+        const response = await fetch(`${API_URL}/submit-score/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(newRating),
+        });
+        console.log("THis is the response: ", response);
 
-        const existingRatings: RatingEntry[] = existingRatingsString 
-          ? JSON.parse(existingRatingsString) 
-          : [];
 
-        // Add new rating
-        const updatedRatings = [...existingRatings, newRating];
-        console.log('Updated ratings:', updatedRatings); // Debug log
-
-        // Save updated ratings
-        await AsyncStorage.setItem('ratings', JSON.stringify(updatedRatings));
-        console.log('Saved to AsyncStorage'); // Debug log
+        if (!response.ok) {
+          throw new Error('Failed to save rating');
+        }
 
         setShowNameModal(false);
         setShowMessage(true);
@@ -89,7 +90,7 @@ export default function HomeScreen() {
 
       } catch (error) {
         console.error('Error:', error);
-        alert('Failed to save photo. Please try again.');
+        alert('Failed to save rating. Please try again.');
       }
     }
   };
