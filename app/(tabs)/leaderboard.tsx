@@ -1,33 +1,68 @@
-import { useState } from 'react';
-import { StyleSheet, View, FlatList } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { StyleSheet, View, FlatList, TouchableOpacity } from 'react-native';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Dummy data for testing
-const dummyData = [
-  { id: '1', name: 'Alex', rating: 9.5 },
-  { id: '2', name: 'Sarah', rating: 9.2 },
-  { id: '3', name: 'Mike', rating: 8.8 },
-  { id: '4', name: 'Emma', rating: 8.5 },
-  { id: '5', name: 'John', rating: 8.2 },
-];
+interface RatingEntry {
+  id: string;
+  name: string;
+  rating: number;
+  timestamp: string;
+}
 
 export default function LeaderboardScreen() {
-  const [ratings] = useState(dummyData);
+  const [ratings, setRatings] = useState<RatingEntry[]>([]);
 
-  const renderRatingItem = ({ item }) => (
-    <View style={styles.ratingItem}>
-      <ThemedText style={styles.name}>{item.name}</ThemedText>
-      <ThemedText style={styles.rating}>{item.rating.toFixed(1)}</ThemedText>
-    </View>
+  useFocusEffect(
+    useCallback(() => {
+      loadRatings();
+    }, [])
   );
+
+  const loadRatings = async () => {
+    try {
+      const savedRatings = await AsyncStorage.getItem('ratings');
+      console.log('Loading ratings:', savedRatings); // Debug log
+      if (savedRatings) {
+        const parsedRatings = JSON.parse(savedRatings);
+        console.log('Parsed ratings:', parsedRatings); // Debug log
+        setRatings(parsedRatings);
+      }
+    } catch (error) {
+      console.error('Error loading ratings:', error);
+    }
+  };
+
+  const clearLeaderboard = async () => {
+    try {
+      await AsyncStorage.removeItem('ratings');
+      setRatings([]); // Clear the state
+    } catch (error) {
+      console.error('Error clearing ratings:', error);
+    }
+  };
 
   return (
     <ThemedView style={styles.container}>
       <ThemedText style={styles.title}>Leaderboard</ThemedText>
+      
+      <TouchableOpacity 
+        style={styles.clearButton}
+        onPress={clearLeaderboard}
+      >
+        <ThemedText style={styles.clearButtonText}>Clear History</ThemedText>
+      </TouchableOpacity>
+
       <FlatList
         data={ratings}
-        renderItem={renderRatingItem}
+        renderItem={({ item }) => (
+          <View style={styles.ratingItem}>
+            <ThemedText style={styles.name}>{item.name}</ThemedText>
+            <ThemedText style={styles.rating}>{item.rating.toFixed(1)}</ThemedText>
+          </View>
+        )}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
       />
@@ -42,8 +77,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#000',
   },
   title: {
-    fontSize: 32,
-    marginTop: 50,
+    fontSize: 25,
+    marginTop: 90,
     marginBottom: 20,
     textAlign: 'center',
     color: '#fff',
@@ -68,6 +103,18 @@ const styles = StyleSheet.create({
   rating: {
     fontSize: 24,
     color: '#A1CEDC',
+    fontWeight: 'bold',
+  },
+  clearButton: {
+    backgroundColor: '#FF4444',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 20,
+    alignSelf: 'center',
+  },
+  clearButtonText: {
+    color: '#fff',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 }); 

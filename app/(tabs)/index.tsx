@@ -3,6 +3,14 @@ import { useState, useRef, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Modal, TextInput } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+interface RatingEntry {
+  id: string;
+  name: string;
+  rating: number;
+  timestamp: string;
+}
 
 export default function HomeScreen() {
   const [type, setType] = useState<CameraType>('front');
@@ -42,49 +50,68 @@ export default function HomeScreen() {
   const handleNameSubmit = async () => {
     if (tempPhotoUri && name.trim()) {
       try {
-        // Save to camera roll (existing functionality)
+        // Save photo to camera roll
         await MediaLibrary.saveToLibraryAsync(tempPhotoUri);
 
-        // Convert photo to base64 (needed for sending in request)
-        const response = await fetch(tempPhotoUri);
-        const blob = await response.blob();
-        const base64Photo = await new Promise((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result);
-          reader.readAsDataURL(blob);
-        });
+        // Create mock backend response
+        const newRating: RatingEntry = {
+          id: Date.now().toString(),
+          name: name,
+          rating: 1,
+          timestamp: new Date().toISOString()
+        };
 
-        // Send to your backend server
-        const serverResponse = await fetch('YOUR_BACKEND_URL/upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            name: name,
-            photo: base64Photo,
-          }),
-        });
+        // Get existing ratings
+        const existingRatingsString = await AsyncStorage.getItem('ratings');
+        console.log('Existing ratings:', existingRatingsString); // Debug log
 
-        if (!serverResponse.ok) {
-          throw new Error('Failed to upload to server');
-        }
+        const existingRatings: RatingEntry[] = existingRatingsString 
+          ? JSON.parse(existingRatingsString) 
+          : [];
 
-        // Continue with existing success flow
+        // Add new rating
+        const updatedRatings = [...existingRatings, newRating];
+        console.log('Updated ratings:', updatedRatings); // Debug log
+
+        // Save updated ratings
+        await AsyncStorage.setItem('ratings', JSON.stringify(updatedRatings));
+        console.log('Saved to AsyncStorage'); // Debug log
+
         setShowNameModal(false);
         setShowMessage(true);
         
         setTimeout(() => {
           setShowMessage(false);
           router.push('/leaderboard');
+          setName('');
+          setTempPhotoUri(null);
         }, 1000);
 
       } catch (error) {
         console.error('Error:', error);
-        alert('Failed to process photo. Please try again.');
+        alert('Failed to save photo. Please try again.');
       }
     }
   };
+
+  // Helper functions to manage ratings storage
+  async function getRatings(): Promise<RatingEntry[]> {
+    try {
+      const ratings = await AsyncStorage.getItem('ratings');
+      return ratings ? JSON.parse(ratings) : [];
+    } catch (error) {
+      console.error('Error getting ratings:', error);
+      return [];
+    }
+  }
+
+  async function saveRatings(ratings: RatingEntry[]) {
+    try {
+      await AsyncStorage.setItem('ratings', JSON.stringify(ratings));
+    } catch (error) {
+      console.error('Error saving ratings:', error);
+    }
+  }
 
   if (!permission) {
     return <View style={styles.container}><Text>Requesting camera permission...</Text></View>;
