@@ -1,27 +1,64 @@
 import { CameraView, CameraType, useCameraPermissions } from 'expo-camera';
 import { useState, useRef, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Image, Animated } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Modal, TextInput } from 'react-native';
 import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
 
 export default function HomeScreen() {
   const [type, setType] = useState<CameraType>('front');
   const [permission, requestPermission] = useCameraPermissions();
-  const [mediaPermission, requestMediaPermission] = MediaLibrary.usePermissions();
+  const [showNameModal, setShowNameModal] = useState(false);
   const [showMessage, setShowMessage] = useState(false);
+  const [name, setName] = useState('');
+  const [tempPhotoUri, setTempPhotoUri] = useState<string | null>(null);
   const cameraRef = useRef<any>(null);
   const router = useRouter();
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [showGuide, setShowGuide] = useState(true);
 
   useEffect(() => {
-    (async () => {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== 'granted') {
-        alert('Sorry, we need media library permissions to save photos!');
-        return;
-      }
-    })();
+    const timer = setTimeout(() => {
+      setShowGuide(false);
+    }, 5000);
+
+    return () => clearTimeout(timer);
   }, []);
+
+  const takePicture = async () => {
+    if (cameraRef.current) {
+      try {
+        const photo = await cameraRef.current.takePictureAsync({
+          quality: 1,
+          base64: true,
+        });
+        setTempPhotoUri(photo.uri);
+        setShowNameModal(true);
+      } catch (error) {
+        console.error('Error taking picture:', error);
+        alert('Failed to take picture. Please try again.');
+      }
+    }
+  };
+
+  const handleNameSubmit = async () => {
+    if (tempPhotoUri && name.trim()) {
+      try {
+        await MediaLibrary.saveToLibraryAsync(tempPhotoUri);
+        setShowNameModal(false);
+        setShowMessage(true);
+        
+        // Navigate after 1 second
+        setTimeout(() => {
+          setShowMessage(false);
+          router.push('/leaderboard');
+          setName('');
+          setTempPhotoUri(null);
+        }, 1000);
+      } catch (error) {
+        console.error('Error saving photo:', error);
+        alert('Failed to save photo. Please try again.');
+      }
+    }
+  };
 
   if (!permission) {
     return <View style={styles.container}><Text>Requesting camera permission...</Text></View>;
@@ -32,75 +69,71 @@ export default function HomeScreen() {
       <View style={styles.container}>
         <Text>No access to camera</Text>
         <TouchableOpacity style={styles.button} onPress={requestPermission}>
-          <Text style={styles.text}>Grant Camera Permission</Text>
+          <Text style={styles.text}>Grant Permission</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  const takePicture = async () => {
-    if (cameraRef.current) {
-      try {
-        const photo = await cameraRef.current.takePictureAsync({
-          quality: 1,
-          base64: true,
-        });
-        await MediaLibrary.saveToLibraryAsync(photo.uri);
-        
-        // Show message
-        setShowMessage(true);
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }).start();
-
-        // After 3 seconds, navigate to leaderboard
-        setTimeout(() => {
-          Animated.timing(fadeAnim, {
-            toValue: 0,
-            duration: 200,
-            useNativeDriver: true,
-          }).start(() => {
-            setShowMessage(false);
-            router.push('/leaderboard');
-          });
-        }, 3000);
-      } catch (error) {
-        console.error('Error taking picture:', error);
-        alert('Failed to take picture. Please try again.');
-      }
-    }
-  };
-
   return (
     <View style={styles.container}>
-      <CameraView 
+      <CameraView
         ref={cameraRef}
-        style={styles.camera} 
+        style={styles.camera}
         facing={type}
       >
+        {showGuide && (
+          <View style={styles.guideContainer}>
+            <Text style={styles.guideText}>Center Your Whole Face</Text>
+          </View>
+        )}
+
         <View style={styles.buttonContainer}>
-          <TouchableOpacity 
-            style={styles.button} 
-            onPress={() => {
-              setType(type === 'back' ? 'front' : 'back');
-            }}
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() => setType(type === 'back' ? 'front' : 'back')}
           >
             <Text style={styles.text}>Flip Camera</Text>
           </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.button} 
+          <TouchableOpacity
+            style={styles.button}
             onPress={takePicture}
           >
             <Text style={styles.text}>Take Photo</Text>
           </TouchableOpacity>
         </View>
       </CameraView>
+
+      <Modal
+        visible={showNameModal}
+        transparent={true}
+        animationType="slide"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Enter your name</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Your name"
+              placeholderTextColor="#666"
+            />
+            <TouchableOpacity
+              style={styles.submitButton}
+              onPress={handleNameSubmit}
+            >
+              <Text style={styles.submitButtonText}>Submit</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {showMessage && (
-        <Animated.View style={[styles.messageContainer, { opacity: fadeAnim }]}>
-          <Text style={styles.messageText}>Your photo be rated!</Text>
-        </Animated.View>
+        <View style={styles.messageContainer}>
+          <Text style={styles.messageText}>Photo Saved!</Text>
+          <Text style={styles.nameText}>{name}</Text>
+        </View>
       )}
     </View>
   );
@@ -109,12 +142,9 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   camera: {
     flex: 1,
-    width: '100%',
   },
   buttonContainer: {
     position: 'absolute',
@@ -122,38 +152,98 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
-    backgroundColor: 'transparent',
+    justifyContent: 'space-around',
     paddingHorizontal: 20,
-    justifyContent: 'space-between',
   },
   button: {
-    flex: 1,
+    backgroundColor: '#A1CEDC',
+    padding: 15,
+    borderRadius: 10,
     alignItems: 'center',
+    flex: 0.45,
+  },
+  text: {
+    fontSize: 16,
+    color: '#000',
+    fontWeight: 'bold',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    color: '#000',
+  },
+  input: {
+    width: '100%',
+    height: 40,
+    borderWidth: 1,
+    borderColor: '#ccc',
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginBottom: 15,
+    color: '#000',
+  },
+  submitButton: {
     backgroundColor: '#A1CEDC',
     padding: 12,
     borderRadius: 8,
-    marginHorizontal: 4,
+    width: '100%',
+    alignItems: 'center',
   },
-  text: {
-    fontSize: 14,
-    fontWeight: 'bold',
+  submitButtonText: {
     color: '#000',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
   messageContainer: {
+    position: 'absolute',
+    top: '40%',
+    alignSelf: 'center',
+    backgroundColor: '#000',
+    padding: 20,
+    borderRadius: 15,
+    alignItems: 'center',
+  },
+  messageText: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+  },
+  nameText: {
+    color: '#A1CEDC',
+    fontSize: 18,
+    marginTop: 10,
+    textAlign: 'center',
+  },
+  guideContainer: {
     position: 'absolute',
     top: 50,
     left: 0,
     right: 0,
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 15,
-    borderRadius: 8,
-    marginHorizontal: 20,
   },
-  messageText: {
+  guideText: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '500',
+    fontFamily: 'Avenir',
+    backgroundColor: '#000',
+    padding: 8,
+    borderRadius: 8,
   },
 });
 
